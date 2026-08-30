@@ -1,7 +1,12 @@
 const express = require('express');
 const { calculateHomeValue } = require('../services/homeValueEngine');
-const { isConfigured: rentcastConfigured, getLiveEstimate } = require('../services/listingsApiService');
 const { isConfigured: simplyRetsConfigured, getNearbyListingPhotos } = require('../services/simplyRetsService');
+
+// RentCast's AVM value (services/listingsApiService.js) is deliberately NOT
+// called here: its result was never wired into anything the frontend
+// displays, so every call was pure wasted API quota. The integration is
+// still there and working (confirmed against a live key) if you want to
+// actually surface its number later — see that file's header comment.
 
 const router = express.Router();
 
@@ -11,24 +16,15 @@ router.post('/', async (req, res) => {
     const freeEstimate = calculateHomeValue(input);
 
     const hasAddress = Boolean(input.address);
-    console.log(`[estimate] Live data gate — RentCast configured: ${rentcastConfigured()}, SimplyRETS configured: ${simplyRetsConfigured()}, address provided: ${hasAddress}${hasAddress ? ` ("${input.address}")` : ''}`);
+    console.log(`[estimate] Live data gate — SimplyRETS configured: ${simplyRetsConfigured()}, address provided: ${hasAddress}${hasAddress ? ` ("${input.address}")` : ''}`);
 
     let liveEstimate = null;
-    if (hasAddress) {
-      const [avmResult, listingPhotos] = await Promise.all([
-        rentcastConfigured() ? getLiveEstimate({
-          address: input.address,
-          bedrooms: input.bedrooms,
-          bathrooms: input.bathrooms,
-          squareFootage: input.squareFootage,
-          propertyType: input.homeType,
-        }) : null,
-        simplyRetsConfigured() ? getNearbyListingPhotos({
-          zip: input.zip,
-          city: input.city,
-          bedrooms: input.bedrooms,
-        }) : [],
-      ]);
+    if (hasAddress && simplyRetsConfigured()) {
+      const listingPhotos = await getNearbyListingPhotos({
+        zip: input.zip,
+        city: input.city,
+        bedrooms: input.bedrooms,
+      });
 
       // Sanity-filter AND rank comps against our own estimate. Listings
       // APIs — demo data especially, but real MLS feeds occasionally too —
@@ -53,20 +49,15 @@ router.post('/', async (req, res) => {
         console.log(`[estimate] Filtered out ${listingPhotos.length - plausibleComps.length} comp(s) with price too far from our estimate to display as comparable.`);
       }
 
-      if (avmResult || plausibleComps.length > 0) {
-        liveEstimate = {
-          source: avmResult ? 'rentcast' : 'simplyrets',
-          valueLow: avmResult?.valueLow ?? null,
-          valueHigh: avmResult?.valueHigh ?? null,
-          comps: plausibleComps, // only SimplyRETS supplies comps here — see services/listingsApiService.js header comment
-        };
+      if (plausibleComps.length > 0) {
+        liveEstimate = { source: 'simplyrets', comps: plausibleComps };
       }
     }
 
     res.json({
       success: true,
       data: freeEstimate,
-      live: liveEstimate, // null unless at least one live data source is configured and returned data
+      live: liveEstimate, // null unless SimplyRETS is configured and returned a plausible comp
     });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message || 'Estimate failed.' });
