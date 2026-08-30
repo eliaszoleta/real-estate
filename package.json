@@ -1,0 +1,12 @@
+{
+  "name": "home-value-cal",
+  "version": "1.0.0",
+  "description": "Home value estimator for buyers — state-specific, condition-driven estimates with real neighborhood proximity data",
+  "scripts": {
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm start",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && npm start"
+  }
+}

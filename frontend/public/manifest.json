@@ -1,0 +1,9 @@
+{
+  "short_name": "HomeValueCal",
+  "name": "HomeValueCal — Home Value Estimator",
+  "icons": [],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#123524",
+  "background_color": "#ffffff"
+}

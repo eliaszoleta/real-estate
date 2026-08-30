@@ -1,0 +1,1 @@
+{"build": {"command": "cd backend && npm install"}, "deploy": {"command": "cd backend && node src/index.js"}}
