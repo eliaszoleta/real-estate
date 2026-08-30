@@ -7,7 +7,8 @@ const rateLimit = require('express-rate-limit');
 const estimateRouter = require('./routes/estimate');
 const locationRouter = require('./routes/location');
 const statesRouter = require('./routes/states');
-const { isConfigured } = require('./services/listingsApiService');
+const { isConfigured: rentcastConfigured } = require('./services/listingsApiService');
+const { isConfigured: simplyRetsConfigured } = require('./services/simplyRetsService');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -54,7 +55,8 @@ app.get('/health', (req, res) => res.json({
   status: 'ok',
   service: 'HomeValueCal API',
   version: '1.0.0',
-  liveListingsApi: isConfigured(),
+  rentcastConfigured: rentcastConfigured(),
+  simplyRetsConfigured: simplyRetsConfigured(),
 }));
 
 app.use((req, res) => res.status(404).json({ success: false, error: 'Not found' }));

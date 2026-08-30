@@ -50,6 +50,7 @@ export default function HomeValueCalculator() {
       const res = await postEstimate({
         state: merged.state,
         city: merged.city,
+        zip: merged.zip,
         address: merged.address,
         lat: merged.lat,
         lng: merged.lng,

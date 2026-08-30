@@ -51,16 +51,25 @@ No configuration is required to run it — every feature works with zero API key
 | Market adjustments (bed/bath/condition/age/lot/features) | Standard residential appraisal practice — percentage-of-value, not flat dollar amounts | Documented inline in `defaults.js` |
 | Geocoding | [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org) | Free, no API key required |
 | Nearby amenities | [OpenStreetMap Overpass API](https://overpass-api.de) | Free, no API key, real live map data |
-| Live per-address AVM + comp photos (optional) | Pluggable in `backend/src/services/listingsApiService.js` | Off by default. Set `RENTCAST_API_KEY` to enable — see that file's header comment for important caveats about verifying the API contract against RentCast's current docs before production use |
+| Live per-address AVM value (optional) | Pluggable in `backend/src/services/listingsApiService.js` | Off by default. Set `RENTCAST_API_KEY` to enable. Confirmed via production testing (2026-08-30) that RentCast's AVM comps, listings search, and single-listing detail all return **no photo data** on our plan — this integration blends its value estimate into the result only. |
+| Real comparable-listing photos (optional) | Pluggable in `backend/src/services/simplyRetsService.js` | Off by default. Set `SIMPLYRETS_USERNAME`/`SIMPLYRETS_PASSWORD` to enable (HTTP Basic Auth, not an API key). Schema confirmed against SimplyRETS's published OpenAPI spec. Their public demo account (`simplyrets`/`simplyrets`) works with no signup and returns fake sample listings — useful for testing before you have a real MLS-backed account. |
 
 ## Why No Real Comp Photos By Default
 
-An accurate "here's a photo of a similar house" feature requires either a licensed MLS/
-listings data feed or a paid real estate API with photo access — neither of which this
-project has by default. Rather than showing a misleading photo, the results screen shows
-a labeled, hand-drawn illustration of the home type/size described (clearly marked as
-illustrative, not an actual listing). If you configure `RENTCAST_API_KEY`, real comparable
-listings with photos appear automatically alongside the free estimate.
+An accurate "here's a photo of a similar house" feature requires a listings data feed
+with photo access, which this project doesn't have configured out of the box. Rather
+than showing a misleading photo, the results screen shows a labeled, hand-drawn
+illustration of the home type/size described (clearly marked as illustrative, not an
+actual listing) whenever no real photo is available. If you configure
+`SIMPLYRETS_USERNAME`/`SIMPLYRETS_PASSWORD`, real comparable listings with photos appear
+automatically instead.
+
+**Compliance note:** a real (non-demo) SimplyRETS account returns genuine MLS-syndicated
+data. Displaying real listing details (address, price, agent/office) publicly is expected
+to carry IDX-style attribution ("Listing courtesy of [agent], [brokerage]") — this app
+surfaces `agentName`/`officeName` on each comp for that purpose, but you're responsible
+for confirming your specific MLS/IDX agreement's exact display requirements before going
+live with real data. The public demo account's fake listings carry no such obligation.
 
 ## Key Calculation Formula
 
@@ -93,7 +102,9 @@ included as a fallback if you'd rather split the backend onto Railway.
 # Backend
 PORT=3001
 FRONTEND_URL=https://your-frontend.vercel.app
-RENTCAST_API_KEY=            # enables live AVM + comp photos
+RENTCAST_API_KEY=            # enables live AVM value estimate
+SIMPLYRETS_USERNAME=         # enables real comp listing photos
+SIMPLYRETS_PASSWORD=
 
 # Frontend
 REACT_APP_API_BASE=          # only needed if backend is on a separate origin

@@ -45,7 +45,7 @@ export default function LocationStep({ value, onNext, onBack }) {
   };
 
   const handleNext = () => {
-    onNext({ state, address, city: geo?.city || null, lat: geo?.lat || null, lng: geo?.lng || null, geo, proximity });
+    onNext({ state, address, city: geo?.city || null, zip: geo?.zip || null, lat: geo?.lat || null, lng: geo?.lng || null, geo, proximity });
   };
 
   return (
