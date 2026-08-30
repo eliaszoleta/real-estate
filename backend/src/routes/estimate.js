@@ -30,18 +30,27 @@ router.post('/', async (req, res) => {
         }) : [],
       ]);
 
-      // Sanity-filter comps against our own estimate range. Listings APIs —
-      // demo data especially, but real MLS feeds occasionally too — can
-      // return an outlier that shares a ZIP/bed count but is wildly off in
-      // price (e.g. a $14M mansion "comparable" to a $400K starter home).
-      // Generous bounds (0.25x–4x our own range) filter out only genuine
-      // outliers, not real price variance between similar homes.
-      const plausibleComps = listingPhotos.filter((c) => {
-        if (!c.price) return true; // can't judge, don't penalize
-        return c.price >= freeEstimate.valueLow * 0.25 && c.price <= freeEstimate.valueHigh * 4;
-      });
+      // Sanity-filter AND rank comps against our own estimate. Listings
+      // APIs — demo data especially, but real MLS feeds occasionally too —
+      // can return a comp that matches on ZIP/bed count but looks nothing
+      // like a home at our price point (a stone mansion "comparable" to a
+      // $400K starter home undermines trust even if its price technically
+      // isn't astronomical). Two passes: first drop anything wildly outside
+      // a plausible range (0.4x–2.5x our estimate), then sort what's left
+      // by closeness to our own midpoint — since the results screen always
+      // uses the FIRST comp with a photo as the hero image, this guarantees
+      // that photo is the best price match we have, not just an arbitrary
+      // one from the API's response order.
+      const midpoint = (freeEstimate.valueLow + freeEstimate.valueHigh) / 2;
+      const plausibleComps = listingPhotos
+        .filter((c) => !c.price || (c.price >= freeEstimate.valueLow * 0.4 && c.price <= freeEstimate.valueHigh * 2.5))
+        .sort((a, b) => {
+          if (!a.price) return 1;
+          if (!b.price) return -1;
+          return Math.abs(a.price - midpoint) - Math.abs(b.price - midpoint);
+        });
       if (plausibleComps.length < listingPhotos.length) {
-        console.log(`[estimate] Filtered out ${listingPhotos.length - plausibleComps.length} comp(s) with price wildly outside our estimate range.`);
+        console.log(`[estimate] Filtered out ${listingPhotos.length - plausibleComps.length} comp(s) with price too far from our estimate to display as comparable.`);
       }
 
       if (avmResult || plausibleComps.length > 0) {
