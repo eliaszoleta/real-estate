@@ -1,6 +1,7 @@
 const express = require('express');
 const { calculateHomeValue } = require('../services/homeValueEngine');
 const { isConfigured: simplyRetsConfigured, getNearbyListingPhotos } = require('../services/simplyRetsService');
+const { isConfigured: pexelsConfigured, getStockHomePhoto } = require('../services/pexelsService');
 
 // RentCast's AVM value (services/listingsApiService.js) is deliberately NOT
 // called here: its result was never wired into anything the frontend
@@ -16,9 +17,12 @@ router.post('/', async (req, res) => {
     const freeEstimate = calculateHomeValue(input);
 
     const hasAddress = Boolean(input.address);
-    console.log(`[estimate] Live data gate — SimplyRETS configured: ${simplyRetsConfigured()}, address provided: ${hasAddress}${hasAddress ? ` ("${input.address}")` : ''}`);
+    console.log(`[estimate] Live data gate — SimplyRETS configured: ${simplyRetsConfigured()}, Pexels configured: ${pexelsConfigured()}, address provided: ${hasAddress}${hasAddress ? ` ("${input.address}")` : ''}`);
 
     let liveEstimate = null;
+
+    // Tier 1: a real comp photo from SimplyRETS, when an address is given
+    // and one is actually available (see that service's coverage caveats).
     if (hasAddress && simplyRetsConfigured()) {
       const listingPhotos = await getNearbyListingPhotos({
         zip: input.zip,
@@ -54,10 +58,25 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // Tier 2: no real comp photo found (or SimplyRETS isn't configured) —
+    // try a well-matched, properly-licensed stock photo instead of jumping
+    // straight to the illustration. Not location-dependent, so this works
+    // even without an address.
+    if (!liveEstimate && pexelsConfigured()) {
+      const stockPhoto = await getStockHomePhoto({
+        homeType: input.homeType,
+        valueLow: freeEstimate.valueLow,
+        valueHigh: freeEstimate.valueHigh,
+      });
+      if (stockPhoto) {
+        liveEstimate = { source: 'pexels', stockPhoto };
+      }
+    }
+
     res.json({
       success: true,
       data: freeEstimate,
-      live: liveEstimate, // null unless SimplyRETS is configured and returned a plausible comp
+      live: liveEstimate, // null unless a live photo source is configured and returned something usable
     });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message || 'Estimate failed.' });

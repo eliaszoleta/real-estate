@@ -51,25 +51,35 @@ No configuration is required to run it — every feature works with zero API key
 | Market adjustments (bed/bath/condition/age/lot/features) | Standard residential appraisal practice — percentage-of-value, not flat dollar amounts | Documented inline in `defaults.js` |
 | Geocoding | [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org) | Free, no API key required |
 | Nearby amenities | [OpenStreetMap Overpass API](https://overpass-api.de) | Free, no API key, real live map data |
-| Live per-address AVM value (optional) | Pluggable in `backend/src/services/listingsApiService.js` | Off by default. Set `RENTCAST_API_KEY` to enable. Confirmed via production testing (2026-08-30) that RentCast's AVM comps, listings search, and single-listing detail all return **no photo data** on our plan — this integration blends its value estimate into the result only. |
-| Real comparable-listing photos (optional) | Pluggable in `backend/src/services/simplyRetsService.js` | Off by default. Set `SIMPLYRETS_USERNAME`/`SIMPLYRETS_PASSWORD` to enable (HTTP Basic Auth, not an API key). Schema confirmed against SimplyRETS's published OpenAPI spec. Their public demo account (`simplyrets`/`simplyrets`) works with no signup and returns fake sample listings — useful for testing before you have a real MLS-backed account. |
+| Real comparable-listing photos (optional, tier 1) | Pluggable in `backend/src/services/simplyRetsService.js` | Off by default. Set `SIMPLYRETS_USERNAME`/`SIMPLYRETS_PASSWORD` to enable (HTTP Basic Auth, not an API key). Schema confirmed against SimplyRETS's published OpenAPI spec. Their public demo account (`simplyrets`/`simplyrets`) works with no signup and returns fake sample listings fixed to Katy, TX / 77430 — useful for testing before you have a real MLS-backed account, but has essentially zero real-world coverage. |
+| Stock photo fallback (optional, tier 2) | Pluggable in `backend/src/services/pexelsService.js` | Off by default. Set `PEXELS_API_KEY` to enable (free, instant, self-serve — no application review, unlike MLS/IDX access). Used only when no real comp photo is found, which is most searches given tier 1's narrow coverage. Returns a properly-licensed, keyword-matched stock photo (by home type + rough price tier) — not a photo of any specific comparable property, and labeled as such. |
+| RentCast AVM value (unused) | `backend/src/services/listingsApiService.js` | Integration works (confirmed against a live key) but is **not called** — its value was never wired into anything the frontend displays, so calling it was pure wasted API quota. Kept as a working starting point if you want to actually surface its number later. |
 
 ## Why No Real Comp Photos By Default
 
-An accurate "here's a photo of a similar house" feature requires a listings data feed
-with photo access, which this project doesn't have configured out of the box. Rather
-than showing a misleading photo, the results screen shows a labeled, hand-drawn
-illustration of the home type/size described (clearly marked as illustrative, not an
-actual listing) whenever no real photo is available. If you configure
-`SIMPLYRETS_USERNAME`/`SIMPLYRETS_PASSWORD`, real comparable listings with photos appear
-automatically instead.
+An accurate "here's a photo of a similar house" feature ideally needs a listings data
+feed with photo access — but real MLS/IDX coverage is inherently narrow (a specific
+market, active listings only, and getting a real account requires a licensed agent or
+broker to sponsor your access; see the SimplyRETS FAQ discussion in project history for
+why "just sign up" isn't realistic for most people). So the results screen uses a
+three-tier fallback, each one clearly labeled for what it actually is:
+
+1. **A real comp photo** (SimplyRETS) — an actual nearby listing, when coverage happens
+   to include one within a plausible price range of the estimate.
+2. **A stock photo** (Pexels) — a properly-licensed, real photograph matched to the
+   home's type and price tier, used whenever tier 1 finds nothing (the common case).
+   Not a photo of any specific comparable property, and captioned as such, with
+   photographer credit per Pexels's license terms.
+3. **The hand-drawn illustration** — final fallback if neither photo source is
+   configured or both come up empty.
 
 **Compliance note:** a real (non-demo) SimplyRETS account returns genuine MLS-syndicated
 data. Displaying real listing details (address, price, agent/office) publicly is expected
 to carry IDX-style attribution ("Listing courtesy of [agent], [brokerage]") — this app
 surfaces `agentName`/`officeName` on each comp for that purpose, but you're responsible
 for confirming your specific MLS/IDX agreement's exact display requirements before going
-live with real data. The public demo account's fake listings carry no such obligation.
+live with real data. The public demo account's fake listings carry no such obligation,
+and Pexels's stock photos require no MLS/IDX relationship at all.
 
 ## Key Calculation Formula
 
@@ -102,9 +112,10 @@ included as a fallback if you'd rather split the backend onto Railway.
 # Backend
 PORT=3001
 FRONTEND_URL=https://your-frontend.vercel.app
-RENTCAST_API_KEY=            # enables live AVM value estimate
-SIMPLYRETS_USERNAME=         # enables real comp listing photos
+SIMPLYRETS_USERNAME=         # tier 1: real comp listing photos (narrow coverage)
 SIMPLYRETS_PASSWORD=
+PEXELS_API_KEY=               # tier 2: stock photo fallback (broad coverage)
+# RENTCAST_API_KEY=           # integration exists but is unused — see table above
 
 # Frontend
 REACT_APP_API_BASE=          # only needed if backend is on a separate origin

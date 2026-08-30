@@ -18,11 +18,12 @@ export default function ResultsScreen({ result, live, onReset }) {
 
   const PreviewImage = HOME_TYPE_PREVIEWS[homeType] || HOME_TYPE_PREVIEWS.single_family;
 
-  // Prefer a real comp photo as the hero image whenever a listings API is
-  // connected and returned one; otherwise fall back to the illustration.
+  // Three-tier photo priority: a real comp photo (SimplyRETS) > a
+  // well-matched stock photo (Pexels) > the hand-drawn illustration.
   const comps = live?.comps || [];
   const heroPhoto = comps.find((c) => c.photoUrl) || null;
   const remainingComps = heroPhoto ? comps.filter((c) => c !== heroPhoto) : comps;
+  const stockPhoto = !heroPhoto ? live?.stockPhoto || null : null;
 
   const handleShare = async () => {
     try {
@@ -77,6 +78,26 @@ export default function ResultsScreen({ result, live, onReset }) {
                   </div>
                   <div style={{ fontSize: 11.5, color: 'var(--text-subtle)', marginTop: 6, marginBottom: 4 }}>
                     {heroPhoto.address ? `${heroPhoto.address} · ` : ''}A real nearby comparable, not a photo of your exact home.
+                  </div>
+                </>
+              ) : stockPhoto ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
+                    <ImageIcon size={13} /> What a home like this typically looks like
+                  </div>
+                  <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                    <img src={stockPhoto.photoUrl} alt="Representative home" style={{ width: '100%', height: 220, objectFit: 'cover', display: 'block' }} />
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--text-subtle)', marginTop: 6, marginBottom: 4 }}>
+                    Representative stock photo matched to this home's type and price range — not a photo of an
+                    actual listing.
+                    {stockPhoto.photographerName && (
+                      <> Photo by{' '}
+                        {stockPhoto.photographerUrl ? (
+                          <a href={stockPhoto.photographerUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-muted)', textDecoration: 'underline' }}>{stockPhoto.photographerName}</a>
+                        ) : stockPhoto.photographerName} via Pexels.
+                      </>
+                    )}
                   </div>
                 </>
               ) : (
