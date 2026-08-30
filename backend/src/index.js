@@ -12,6 +12,13 @@ const { isConfigured } = require('./services/listingsApiService');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Vercel (and most hosts) put this app behind a reverse proxy that sets
+// X-Forwarded-For. Express doesn't trust that header by default (a client
+// could otherwise spoof its IP), which makes express-rate-limit refuse to
+// use it for rate-limit keys — trusting exactly one hop (the platform's own
+// proxy) is the standard fix and keeps rate limiting accurate per-visitor.
+app.set('trust proxy', 1);
+
 app.use(helmet({ crossOriginResourcePolicy: false }));
 
 const allowedOrigins = [
