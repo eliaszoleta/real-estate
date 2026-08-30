@@ -18,6 +18,12 @@ export default function ResultsScreen({ result, live, onReset }) {
 
   const PreviewImage = HOME_TYPE_PREVIEWS[homeType] || HOME_TYPE_PREVIEWS.single_family;
 
+  // Prefer a real comp photo as the hero image whenever a listings API is
+  // connected and returned one; otherwise fall back to the illustration.
+  const comps = live?.comps || [];
+  const heroPhoto = comps.find((c) => c.photoUrl) || null;
+  const remainingComps = heroPhoto ? comps.filter((c) => c !== heroPhoto) : comps;
+
   const handleShare = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
@@ -61,16 +67,32 @@ export default function ResultsScreen({ result, live, onReset }) {
             </div>
 
             <div style={{ padding: '24px 28px 8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
-                <ImageIcon size={13} /> What a home like this typically looks like
-              </div>
-              <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                <PreviewImage />
-              </div>
-              <div style={{ fontSize: 11.5, color: 'var(--text-subtle)', marginTop: 6, marginBottom: 4 }}>
-                Illustrative sketch based on your answers — not a photo of an actual listing.
-                {live?.comps?.length > 0 ? ' Real comparable listings below.' : ''}
-              </div>
+              {heroPhoto ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
+                    <ImageIcon size={13} /> A real comparable listing near you
+                  </div>
+                  <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                    <img src={heroPhoto.photoUrl} alt={heroPhoto.address || 'Comparable listing'} style={{ width: '100%', height: 220, objectFit: 'cover', display: 'block' }} />
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--text-subtle)', marginTop: 6, marginBottom: 4 }}>
+                    {heroPhoto.address ? `${heroPhoto.address} · ` : ''}A real nearby comparable, not a photo of your exact home.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
+                    <ImageIcon size={13} /> What a home like this typically looks like
+                  </div>
+                  <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                    <PreviewImage />
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--text-subtle)', marginTop: 6, marginBottom: 4 }}>
+                    Illustrative sketch based on your answers — not a photo of an actual listing. Connect a listings
+                    API (see README) to show a real comparable photo here instead.
+                  </div>
+                </>
+              )}
             </div>
 
             <div style={{ padding: '20px 28px 26px' }}>
@@ -89,11 +111,11 @@ export default function ResultsScreen({ result, live, onReset }) {
                 ))}
               </div>
 
-              {live?.comps?.length > 0 && (
+              {remainingComps.length > 0 && (
                 <div style={{ marginBottom: 22 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Comparable Listings</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Other Comparable Listings</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
-                    {live.comps.map((c, i) => (
+                    {remainingComps.map((c, i) => (
                       <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', fontSize: 12 }}>
                         {c.photoUrl && <img src={c.photoUrl} alt={c.address || 'Comparable listing'} style={{ width: '100%', height: 90, objectFit: 'cover' }} />}
                         <div style={{ padding: '8px 10px' }}>
