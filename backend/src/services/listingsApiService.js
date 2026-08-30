@@ -28,7 +28,14 @@ function isConfigured() {
  * should always have a free-engine fallback ready.
  */
 async function getLiveEstimate({ address, bedrooms, bathrooms, squareFootage, propertyType }) {
-  if (!isConfigured()) return null;
+  if (!isConfigured()) {
+    console.log('[listingsApi] RENTCAST_API_KEY not set — skipping live lookup, using free engine only.');
+    return null;
+  }
+  if (!address) {
+    console.log('[listingsApi] No address provided — skipping live lookup (state-only estimates always use the free engine).');
+    return null;
+  }
 
   const params = new URLSearchParams({ address });
   if (bedrooms) params.set('bedrooms', String(bedrooms));
@@ -40,12 +47,20 @@ async function getLiveEstimate({ address, bedrooms, bathrooms, squareFootage, pr
   const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
+    console.log(`[listingsApi] Requesting live estimate for "${address}"…`);
     const res = await fetch(`${RENTCAST_BASE_URL}/avm/value?${params.toString()}`, {
       headers: { 'X-Api-Key': process.env.RENTCAST_API_KEY, Accept: 'application/json' },
       signal: controller.signal,
     });
-    if (!res.ok) return null;
+
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => '');
+      console.error(`[listingsApi] RentCast responded ${res.status} ${res.statusText}: ${bodyText.slice(0, 500)}`);
+      return null;
+    }
+
     const data = await res.json();
+    console.log('[listingsApi] Raw RentCast response keys:', Object.keys(data || {}));
 
     // Best-effort mapping of RentCast's documented response shape — confirm
     // field names against a live response before trusting this in production.
@@ -59,13 +74,20 @@ async function getLiveEstimate({ address, bedrooms, bathrooms, squareFootage, pr
       distanceMiles: c.distance || null,
     })) : [];
 
+    if (comps.length === 0) {
+      console.warn('[listingsApi] Response parsed OK but yielded 0 comps — the field-mapping in this file likely does not match RentCast\'s actual response shape. Log the raw response above and adjust the mapping.');
+    } else if (!comps.some((c) => c.photoUrl)) {
+      console.warn('[listingsApi] Got comps but none had a photo — this RentCast plan/endpoint may not return photos.');
+    }
+
     return {
       source: 'rentcast',
       valueLow: data.priceRangeLow || data.price || null,
       valueHigh: data.priceRangeHigh || data.price || null,
       comps,
     };
-  } catch {
+  } catch (err) {
+    console.error('[listingsApi] Live estimate request failed:', err.message);
     return null;
   } finally {
     clearTimeout(timeout);
