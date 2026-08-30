@@ -10,7 +10,11 @@ router.post('/', async (req, res) => {
     const freeEstimate = calculateHomeValue(input);
 
     let liveEstimate = null;
-    if (isConfigured() && input.address) {
+    const keyConfigured = isConfigured();
+    const hasAddress = Boolean(input.address);
+    console.log(`[estimate] Live listings gate — RENTCAST_API_KEY configured: ${keyConfigured}, address provided: ${hasAddress}${hasAddress ? ` ("${input.address}")` : ''}`);
+
+    if (keyConfigured && hasAddress) {
       liveEstimate = await getLiveEstimate({
         address: input.address,
         bedrooms: input.bedrooms,
