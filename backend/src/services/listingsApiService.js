@@ -147,20 +147,40 @@ async function getNearbyListingPhotos({ lat, lng, city, state, bedrooms, radiusM
     const listings = Array.isArray(data) ? data : Array.isArray(data.listings) ? data.listings : [];
     console.log(`[listingsApi] Raw RentCast listings response: ${Array.isArray(data) ? `array of ${data.length}` : `object with keys ${Object.keys(data || {})}`}`);
 
+    if (listings.length > 0) {
+      console.log('[listingsApi] First listing object (for field mapping):', JSON.stringify(listings[0]).slice(0, 2000));
+    }
+
+    // Try every plausible field name/shape a photo could live under —
+    // providers vary, and some only include media behind extra params.
+    const extractPhotoUrl = (l) => {
+      const candidates = [l.photos, l.images, l.photoUrls, l.pictures, l.imageUrls, l.media];
+      for (const c of candidates) {
+        if (Array.isArray(c) && c.length > 0) {
+          const first = c[0];
+          if (typeof first === 'string') return first;
+          if (first && typeof first === 'object') return first.url || first.href || first.src || null;
+        }
+        if (typeof c === 'string' && c) return c;
+      }
+      return null;
+    };
+
     const withPhotos = listings
-      .filter((l) => Array.isArray(l.photos) && l.photos.length > 0)
+      .map((l) => ({ l, photoUrl: extractPhotoUrl(l) }))
+      .filter((x) => x.photoUrl)
       .slice(0, 6)
-      .map((l) => ({
+      .map(({ l, photoUrl }) => ({
         address: l.formattedAddress || l.address || null,
         price: l.price || l.listPrice || null,
         bedrooms: l.bedrooms || null,
         bathrooms: l.bathrooms || null,
         squareFootage: l.squareFootage || null,
-        photoUrl: l.photos[0],
+        photoUrl,
       }));
 
     if (listings.length > 0 && withPhotos.length === 0) {
-      console.warn('[listingsApi] Found listings but none had a "photos" array — check the raw response shape above and adjust the field name in getNearbyListingPhotos.');
+      console.warn('[listingsApi] Found listings but no photo field matched any known name — see the full first-listing object logged above to find the real field name (or this plan/endpoint may not include photos at all), then update extractPhotoUrl().');
     }
     return withPhotos;
   } catch (err) {
