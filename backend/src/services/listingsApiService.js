@@ -94,4 +94,81 @@ async function getLiveEstimate({ address, bedrooms, bathrooms, squareFootage, pr
   }
 }
 
-module.exports = { isConfigured, getLiveEstimate };
+/**
+ * Confirmed via production logs (2026-08-30): RentCast's /avm/value endpoint
+ * returns comparables used for the valuation math, but those comps do NOT
+ * include photos — it's an AVM endpoint, not a listings feed. Real photos
+ * require a separate call to RentCast's active sale-listings search, which
+ * pulls from actual for-sale inventory (MLS-sourced) and does carry photos.
+ *
+ * IMPORTANT: same caveat as getLiveEstimate — this endpoint path and
+ * response shape reflect RentCast's documented Sale Listings API as of this
+ * writing, but is UNVERIFIED against a live response. If the log line below
+ * ("Raw RentCast listings response") shows a different shape than expected,
+ * adjust the mapping accordingly — that's exactly what happened with the
+ * AVM endpoint, so treat this one the same way: ship it, read the log line
+ * from the first real request, fix the mapping once.
+ */
+async function getNearbyListingPhotos({ lat, lng, city, state, bedrooms, radiusMiles = 2 }) {
+  if (!isConfigured()) return [];
+  if (!(lat && lng) && !(city && state)) {
+    console.log('[listingsApi] No coordinates or city/state available — skipping nearby-listings photo lookup.');
+    return [];
+  }
+
+  const params = new URLSearchParams({ status: 'Active', limit: '8' });
+  if (lat && lng) {
+    params.set('latitude', String(lat));
+    params.set('longitude', String(lng));
+    params.set('radius', String(radiusMiles));
+  } else {
+    params.set('city', city);
+    params.set('state', state);
+  }
+  if (bedrooms) params.set('bedrooms', String(bedrooms));
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    console.log(`[listingsApi] Searching nearby active listings (${lat && lng ? `${lat},${lng} within ${radiusMiles}mi` : `${city}, ${state}`})…`);
+    const res = await fetch(`${RENTCAST_BASE_URL}/listings/sale?${params.toString()}`, {
+      headers: { 'X-Api-Key': process.env.RENTCAST_API_KEY, Accept: 'application/json' },
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => '');
+      console.error(`[listingsApi] Listings search responded ${res.status} ${res.statusText}: ${bodyText.slice(0, 500)}`);
+      return [];
+    }
+
+    const data = await res.json();
+    const listings = Array.isArray(data) ? data : Array.isArray(data.listings) ? data.listings : [];
+    console.log(`[listingsApi] Raw RentCast listings response: ${Array.isArray(data) ? `array of ${data.length}` : `object with keys ${Object.keys(data || {})}`}`);
+
+    const withPhotos = listings
+      .filter((l) => Array.isArray(l.photos) && l.photos.length > 0)
+      .slice(0, 6)
+      .map((l) => ({
+        address: l.formattedAddress || l.address || null,
+        price: l.price || l.listPrice || null,
+        bedrooms: l.bedrooms || null,
+        bathrooms: l.bathrooms || null,
+        squareFootage: l.squareFootage || null,
+        photoUrl: l.photos[0],
+      }));
+
+    if (listings.length > 0 && withPhotos.length === 0) {
+      console.warn('[listingsApi] Found listings but none had a "photos" array — check the raw response shape above and adjust the field name in getNearbyListingPhotos.');
+    }
+    return withPhotos;
+  } catch (err) {
+    console.error('[listingsApi] Nearby listings search failed:', err.message);
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+module.exports = { isConfigured, getLiveEstimate, getNearbyListingPhotos };

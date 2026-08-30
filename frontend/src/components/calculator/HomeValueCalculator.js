@@ -51,6 +51,8 @@ export default function HomeValueCalculator() {
         state: merged.state,
         city: merged.city,
         address: merged.address,
+        lat: merged.lat,
+        lng: merged.lng,
         homeType: merged.homeType,
         squareFootage: merged.squareFootage,
         bedrooms: merged.bedrooms,
