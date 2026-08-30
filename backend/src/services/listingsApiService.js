@@ -22,6 +22,21 @@ function isConfigured() {
   return Boolean(process.env.RENTCAST_API_KEY);
 }
 
+// Try every plausible field name/shape a photo could live under — providers
+// vary, and some only include media on certain endpoints/params.
+function extractPhotoUrl(l) {
+  const candidates = [l.photos, l.images, l.photoUrls, l.pictures, l.imageUrls, l.media];
+  for (const c of candidates) {
+    if (Array.isArray(c) && c.length > 0) {
+      const first = c[0];
+      if (typeof first === 'string') return first;
+      if (first && typeof first === 'object') return first.url || first.href || first.src || null;
+    }
+    if (typeof c === 'string' && c) return c;
+  }
+  return null;
+}
+
 /**
  * Attempts a live value estimate for a specific address. Returns null if no
  * API key is configured, the request fails, or it times out — callers
@@ -151,22 +166,7 @@ async function getNearbyListingPhotos({ lat, lng, city, state, bedrooms, radiusM
       console.log('[listingsApi] First listing object (for field mapping):', JSON.stringify(listings[0]).slice(0, 2000));
     }
 
-    // Try every plausible field name/shape a photo could live under —
-    // providers vary, and some only include media behind extra params.
-    const extractPhotoUrl = (l) => {
-      const candidates = [l.photos, l.images, l.photoUrls, l.pictures, l.imageUrls, l.media];
-      for (const c of candidates) {
-        if (Array.isArray(c) && c.length > 0) {
-          const first = c[0];
-          if (typeof first === 'string') return first;
-          if (first && typeof first === 'object') return first.url || first.href || first.src || null;
-        }
-        if (typeof c === 'string' && c) return c;
-      }
-      return null;
-    };
-
-    const withPhotos = listings
+    let withPhotos = listings
       .map((l) => ({ l, photoUrl: extractPhotoUrl(l) }))
       .filter((x) => x.photoUrl)
       .slice(0, 6)
@@ -180,7 +180,8 @@ async function getNearbyListingPhotos({ lat, lng, city, state, bedrooms, radiusM
       }));
 
     if (listings.length > 0 && withPhotos.length === 0) {
-      console.warn('[listingsApi] Found listings but no photo field matched any known name — see the full first-listing object logged above to find the real field name (or this plan/endpoint may not include photos at all), then update extractPhotoUrl().');
+      console.warn('[listingsApi] Search results have no photo field — trying the single-listing detail endpoint instead (some providers only include media there).');
+      withPhotos = await getPhotosFromListingDetails(listings.slice(0, 3));
     }
     return withPhotos;
   } catch (err) {
@@ -189,6 +190,54 @@ async function getNearbyListingPhotos({ lat, lng, city, state, bedrooms, radiusM
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/**
+ * Fallback for when the search/list endpoint's results carry no photo data:
+ * fetch a handful of individual listings by ID and check whether the detail
+ * response includes photos. Capped at a few IDs to limit API usage per
+ * estimate request. UNVERIFIED against a live response — logs the raw
+ * detail object so the mapping can be corrected if this endpoint path or
+ * shape turns out to be wrong too.
+ */
+async function getPhotosFromListingDetails(candidateListings) {
+  for (const listing of candidateListings) {
+    if (!listing.id) continue;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      console.log(`[listingsApi] Fetching listing detail for id "${listing.id}"…`);
+      const res = await fetch(`${RENTCAST_BASE_URL}/listings/sale/${encodeURIComponent(listing.id)}`, {
+        headers: { 'X-Api-Key': process.env.RENTCAST_API_KEY, Accept: 'application/json' },
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const bodyText = await res.text().catch(() => '');
+        console.error(`[listingsApi] Listing detail (${listing.id}) responded ${res.status}: ${bodyText.slice(0, 300)}`);
+        continue;
+      }
+      const detail = await res.json();
+      console.log(`[listingsApi] Listing detail object for "${listing.id}":`, JSON.stringify(detail).slice(0, 2000));
+
+      const photoUrl = extractPhotoUrl(detail);
+      if (photoUrl) {
+        return [{
+          address: detail.formattedAddress || listing.formattedAddress || null,
+          price: detail.price || listing.price || null,
+          bedrooms: detail.bedrooms || listing.bedrooms || null,
+          bathrooms: detail.bathrooms || listing.bathrooms || null,
+          squareFootage: detail.squareFootage || listing.squareFootage || null,
+          photoUrl,
+        }];
+      }
+    } catch (err) {
+      console.error(`[listingsApi] Listing detail request failed for "${listing.id}":`, err.message);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  console.warn('[listingsApi] No photo found on the detail endpoint either — this RentCast plan/dataset likely does not include photos at all.');
+  return [];
 }
 
 module.exports = { isConfigured, getLiveEstimate, getNearbyListingPhotos };
