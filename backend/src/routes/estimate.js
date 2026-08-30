@@ -30,12 +30,26 @@ router.post('/', async (req, res) => {
         }) : [],
       ]);
 
-      if (avmResult || listingPhotos.length > 0) {
+      // Sanity-filter comps against our own estimate range. Listings APIs —
+      // demo data especially, but real MLS feeds occasionally too — can
+      // return an outlier that shares a ZIP/bed count but is wildly off in
+      // price (e.g. a $14M mansion "comparable" to a $400K starter home).
+      // Generous bounds (0.25x–4x our own range) filter out only genuine
+      // outliers, not real price variance between similar homes.
+      const plausibleComps = listingPhotos.filter((c) => {
+        if (!c.price) return true; // can't judge, don't penalize
+        return c.price >= freeEstimate.valueLow * 0.25 && c.price <= freeEstimate.valueHigh * 4;
+      });
+      if (plausibleComps.length < listingPhotos.length) {
+        console.log(`[estimate] Filtered out ${listingPhotos.length - plausibleComps.length} comp(s) with price wildly outside our estimate range.`);
+      }
+
+      if (avmResult || plausibleComps.length > 0) {
         liveEstimate = {
           source: avmResult ? 'rentcast' : 'simplyrets',
           valueLow: avmResult?.valueLow ?? null,
           valueHigh: avmResult?.valueHigh ?? null,
-          comps: listingPhotos, // only SimplyRETS supplies comps here — see services/listingsApiService.js header comment
+          comps: plausibleComps, // only SimplyRETS supplies comps here — see services/listingsApiService.js header comment
         };
       }
     }
